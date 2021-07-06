@@ -1,0 +1,47 @@
+-- a) Atualizar automaticamente o stock de peças após inserção de registos na 
+-- tabela ReparacaoPeca
+DROP TRIGGER IF EXISTS atualizaStockPecas;
+CREATE TRIGGER atualizaStockPecas
+AFTER INSERT ON ReparacaoPeca
+BEGIN
+  UPDATE Peca SET quantidade=quantidade-NEW.quantidade WHERE idPeca=NEW.idPeca;
+END;
+
+-- b)Se, na inserção de uma reparação, não for especificado o cliente, assumir que 
+-- este é o proprietário do carro.
+DROP TRIGGER IF EXISTS defaultClient;
+CREATE TRIGGER defaultClient
+AFTER INSERT ON Reparacao
+WHEN (NEW.idCliente IS NULL)
+BEGIN
+  UPDATE Reparacao SET idCliente=(
+    SELECT idCliente FROM Carro  WHERE idCarro=NEW.idCarro
+  );
+END;
+
+-- c) Simultaneamente: (1) impedir a atribuição de peças não compatíveis com o 
+-- modelo do carro em reparação; e (2) impedir a atribuição de peças sem stock 
+-- suficiente para satisfazer a quantidade pretendida na reparação
+DROP TRIGGER IF EXISTS validaPecasReparacao;
+CREATE TRIGGER validaPecasReparacao
+BEFORE INSERT ON ReparacaoPeca
+WHEN NOT EXISTS (
+  SELECT * 
+  FROM Reparacao 
+    JOIN Carro USING (idCarro) 
+    JOIN PecaModelo USING (idModelo)
+    JOIN Peca USING (idPeca)
+  WHERE idReparacao=NEW.idReparacao
+    AND idPeca=NEW.idPeca
+    AND quantidade >= NEW.quantidade
+) -- verificar se a peça é compatível
+BEGIN
+  SELECT RAISE(ABORT, 'there was an error'); -- se não for válida, lançar erro
+END;
+
+-- INSERT INTO ReparacaoPeca (idReparacao, idPeca, quantidade) VALUES (3, 1, 20);
+
+-- d) Quando se tenta inserir registos numa vista com os nomes de todos os 
+-- modelos e respetivas marcas, estas inserções sejam feitas nas tabelas que 
+-- dão origem à vista. A vista deve também ser criada no contexto deste 
+-- exercício.
